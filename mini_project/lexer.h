@@ -209,32 +209,32 @@ private:
 
 
 // reads input from a file and prints tokens.
-int main() {
-    string filename = "sample.sql";
-    ifstream file(filename);
-    if (!file) {
-        cerr << "Cannot open file: " << filename << endl;
-        return 1;
-    }
-    string input;
-    char ch;
-    while (file.get(ch)) {
-        input.push_back(ch);
-    }
-    file.close();
+// int main() {
+//     string filename = "sample.sql";
+//     ifstream file(filename);
+//     if (!file) {
+//         cerr << "Cannot open file: " << filename << endl;
+//         return 1;
+//     }
+//     string input;
+//     char ch;
+//     while (file.get(ch)) {
+//         input.push_back(ch);
+//     }
+//     file.close();
 
-    Lexer lexer(input);
-    vector<Token> tokens;
-    Token token;
-    do {
-        token = lexer.getNextToken();
-        tokens.push_back(token);
-    } while (token.type != TOKEN_EOF);
+//     Lexer lexer(input);
+//     vector<Token> tokens;
+//     Token token;
+//     do {
+//         token = lexer.getNextToken();
+//         tokens.push_back(token);
+//     } while (token.type != TOKEN_EOF);
 
-    // print the tokens.
-    for (const auto &t : tokens) {
-        cout << setw(15) << left << tokenToString(t.type) << " : " << t.lexeme << endl;
-    }
+//     // print the tokens.
+//     for (const auto &t : tokens) {
+//         cout << setw(15) << left << tokenToString(t.type) << " : " << t.lexeme << endl;
+//     }
 
-    return 0;
-}
+//     return 0;
+// }
