@@ -107,6 +107,9 @@ vector<Production> productions = {
     
     // <SQL_TAIL> → ε
     {"<SQL_TAIL>", {"ε"}},
+
+    //case of sqltail with eof
+    {"<SQL_TAIL>", {"$"}},
     
     // <STMT> → <SELECT_STMT>
     {"<STMT>", {"<SELECT_STMT>"}},
@@ -424,12 +427,12 @@ void buildParsingTable() {
 
 
 bool parseTokens(const vector<Token>& tokens) {
-    // Initialize the parsing stack with the end-of-input marker and the start symbol.
+    // initialize the parsing stack with the end-of-input marker and the start symbol.
     stack<string> parseStack;
     parseStack.push("$");
     parseStack.push("<SQL>");  // Start symbol
     
-    // Index for the token stream.
+    // index for the token stream.
     int index = 0;
     
     while (!parseStack.empty()) {
@@ -437,13 +440,51 @@ bool parseTokens(const vector<Token>& tokens) {
         Token currentToken = tokens[index];
         string tokenStr = tokenToString(currentToken.type);
         
-        // If the top of the stack is the end marker and the current token is also end-of-input, accept.
+
+        if(tokenStr=="COMMA"){
+            tokenStr=",";
+        }
+        else if( tokenStr=="SEMICOLON"){
+            tokenStr=";";
+        }
+        else if(tokenStr=="LPAREN"){
+            tokenStr="(";
+        }
+        else if(tokenStr=="RPAREN"){
+            tokenStr=")";
+        }
+        else if(tokenStr=="IDENTIFIER"){
+            tokenStr="IDENTIFIER";
+        }
+        else if(tokenStr=="NUMBER"){
+            tokenStr="NUMBER";
+        }
+        else if(tokenStr=="STRING"){
+            tokenStr="STRING";
+        }
+        else if(tokenStr=="EQ"){
+            tokenStr="=";
+        }
+        else if(tokenStr=="GT"){
+            tokenStr=">";
+        }
+        else if(tokenStr=="LT"){
+            tokenStr="<";
+        }
+    
+
+        else if(tokenStr=="EOF"){
+            tokenStr="$";
+        }
+
+
+        // if the top of the stack is the end marker and the current token is also end-of-input, accept.
         if (top == "$" && tokenStr == "$") {
             parseStack.pop();
             break;
         }
         
-        // If the top is a terminal.
+        // if the top is a terminal.
         if (!isNonTerminal(top)) {
             if (top == tokenStr) {
                 parseStack.pop();
@@ -453,8 +494,12 @@ bool parseTokens(const vector<Token>& tokens) {
                      << ": expected \"" << top << "\", found \"" << tokenStr << "\" (" << currentToken.lexeme << ")" << endl;
                 return false;
             }
-        } else { // Top is a nonterminal.
+        } else { // top is a nonterminal.
+           
+            
             pair<string, string> key(top, tokenStr);
+           
+
             if (parseTable.find(key) == parseTable.end()) {
                 cerr << "Syntax Error at line " << currentToken.line << ", column " << currentToken.column 
                      << ": no rule for nonterminal " << top << " with lookahead \"" << tokenStr << "\" (" << currentToken.lexeme << ")" << endl;
@@ -463,7 +508,7 @@ bool parseTokens(const vector<Token>& tokens) {
             int prodIndex = parseTable[key];
             Production prod = productions[prodIndex];
             parseStack.pop();
-            // Push production's RHS symbols in reverse order (if production is not ε).
+            // push production's RHS symbols in reverse order (if production is not ε).
             if (!(prod.rhs.size() == 1 && prod.rhs[0] == "ε")) {
                 for (int i = prod.rhs.size() - 1; i >= 0; i--) {
                     parseStack.push(prod.rhs[i]);
@@ -472,7 +517,7 @@ bool parseTokens(const vector<Token>& tokens) {
         }
     }
     
-    // Check if we consumed all tokens.
+    // check if we consumed all tokens.
     if (tokens[index].type != TOKEN_EOF) {
         cerr << "Syntax Error: Extra tokens remain after parsing." << endl;
         return false;
@@ -482,9 +527,44 @@ bool parseTokens(const vector<Token>& tokens) {
 }
 
 int main(){
+    
+    //tokens for the parser first phase
+
+    string filename = "sample.sql";
+    ifstream file(filename);
+    if (!file) {
+        cerr << "Cannot open file: " << filename << endl;
+        return 1;
+    }
+    string input;
+    char ch;
+    while (file.get(ch)) {
+        input.push_back(ch);
+    }
+    file.close();
+
+    Lexer lexer(input);
+    vector<Token> tokens;
+    Token token;
+    do {
+        token = lexer.getNextToken();
+        tokens.push_back(token);
+    } while (token.type != TOKEN_EOF);
+
+    // print the tokens.
+    for (const auto &t : tokens) {
+        cout << "Token: " << tokenToString(t.type) << " [ Lexeme: " << t.lexeme << " ]"<< endl;
+           cout << "[ Line: " << t.line << ", Column: " << t.column 
+             << " ]" << endl;
+        // cout<<t.column<<endl;
+    }
+
+    //first calculating the first and follow sets for the grammar
+
     cout<<"First and Follow Sets for SQL Grammar"<<endl;
     cout<<"First Sets:"<<endl;
     set<string> firstSet;
+    
     for(const auto &prod: productions){
         if(firstSet.find(prod.lhs) == firstSet.end()){
             set<string> first = computeFirst(prod.lhs);
@@ -496,12 +576,10 @@ int main(){
         }
         firstSet.insert(prod.lhs);
     }
-
     cout<<endl;
 
     cout<<"Follow Sets:"<<endl;
     set<string> followSet;
-
     for(const auto &prod: productions){
         if(followSet.find(prod.lhs) == followSet.end()){
             set<string> follow = computeFollow(prod.lhs);
@@ -517,10 +595,13 @@ int main(){
 
     cout<<"First and Follow Sets Computed Successfully!"<<endl;
 
+
+    //making the parsing table for the grammar
+
     cout<<"Building Parsing Table..."<<endl;
     buildParsingTable();
-
     cout<<"Parsing Table Built Successfully!"<<endl;
+
 
     cout<<"Parsing Table:"<<endl;
     for (const auto &entry : parseTable) {
@@ -532,9 +613,18 @@ int main(){
     }
     cout<<endl;
 
+    cout<<"Parsing the SQL query..."<<endl;
 
+    if (parseTokens(tokens)) {
+        cout << "Parsing completed successfully!" << endl;
+    } else {
+        cout << "Parsing failed!" << endl;
+    }
+    cout<<endl;
 
-
+    cout<<"Exiting..."<<endl;
+    cout<<"Thank you!"<<endl;
+    cout<<"Have a nice day!"<<endl;
 
     return 0;
 }
