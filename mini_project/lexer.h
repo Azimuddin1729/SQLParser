@@ -73,6 +73,8 @@ string tokenToString(TOKEN type) {
 struct Token {
     TOKEN type;     // the type of the token
     string lexeme;  // the text of the token
+    int line;     // line number in the input
+    int column;   // column number in the input
 };
 
 // ------------------------------------------------------------------
@@ -83,39 +85,45 @@ public:
     Lexer(const string &input){
         this->input = input;
         pos = 0;
+        // initialize the line and column numbers.
+        line = 1;
+        column = 1;
     }
     // the next token from the input.
     Token getNextToken() {
         rWhiteSpace();
 
+        int tokenLine = line;
+        int tokenColumn = column;
+
         if (pos >= input.size())
-         return {TOKEN_EOF, ""};
+         return {TOKEN_EOF, "", tokenLine, tokenColumn}; // end of input
 
         char current = input[pos];
 
         // handle punctuation and single-character tokens.
-        if (current == '(') { pos++; return {TOKEN_LPAREN, "("}; }
-        if (current == ')') { pos++; return {TOKEN_RPAREN, ")"}; }
-        if (current == ',') { pos++; return {TOKEN_COMMA, ","}; }
-        if (current == ';') { pos++; return {TOKEN_SEMICOLON, ";"}; }
-        if (current == '=') { pos++; return {TOKEN_EQ, "="}; }
-        if (current == '>') { pos++; return {TOKEN_GT, ">"}; }
-        if (current == '<') { pos++; return {TOKEN_LT, "<"}; }
+        if (current == '(') { advance(); return {TOKEN_LPAREN, "(",tokenLine,tokenColumn}; }
+        if (current == ')') { advance(); return {TOKEN_RPAREN, ")",tokenLine,tokenColumn}; }
+        if (current == ',') { advance(); return {TOKEN_COMMA, ",",tokenLine,tokenColumn}; }
+        if (current == ';') { advance(); return {TOKEN_SEMICOLON, ";",tokenLine,tokenColumn}; }
+        if (current == '=') { advance(); return {TOKEN_EQ, "=",tokenLine,tokenColumn}; }
+        if (current == '>') { advance(); return {TOKEN_GT, ">",tokenLine,tokenColumn}; }
+        if (current == '<') { advance(); return {TOKEN_LT, "<",tokenLine,tokenColumn}; }
 
         // check of string literals: assuming SQL strings use single quotes.
         if (current == '\'') {
-            pos++; // skip the opening quote
+            advance();// skip the opening quote
             string temp;
             while (pos < input.size() && input[pos] != '\'') {
                 temp.push_back(input[pos]);
-                pos++;
+                advance();
             }
             if (pos < input.size() && input[pos] == '\'') {
-                pos++; // skip the closing quote
-                return {TOKEN_STRING, temp};
+                advance();// skip the closing quote
+                return {TOKEN_STRING, temp, tokenLine, tokenColumn}; // return the string literal
             } else {
                 // error: unmatched quote.
-                return {TOKEN_UNKNOWN, temp};
+                return {TOKEN_UNKNOWN, temp, tokenLine, tokenColumn};
             }
         }
 
@@ -124,9 +132,9 @@ public:
             string num;
             while (pos < input.size() && isDigit(input[pos])) {
                 num.push_back(input[pos]);
-                pos++;
+                advance();
             }
-            return {TOKEN_NUMBER, num};
+            return {TOKEN_NUMBER, num,tokenLine,tokenColumn};
         }// floats,double handling later
         //also comments 
 
@@ -135,38 +143,55 @@ public:
             string ident;
             while (pos < input.size() && (isAlphaNumeric(input[pos]) || input[pos] == '_')) {
                 ident.push_back(input[pos]);
-                pos++;
+                advance();
             }
             // Convert to uppercase for case-insensitive keyword matching.
             string upperIdent = toUpper(ident);
             if (keywords.find(upperIdent) != keywords.end()) {
-                return {keywords[upperIdent], ident};
+                return {keywords[upperIdent], ident,tokenLine, tokenColumn}; // return the keyword token
             }
-            return {TOKEN_IDENTIFIER, ident};
+            return {TOKEN_IDENTIFIER, ident,tokenLine, tokenColumn}; // return the identifier token
         }
 
         //could have also done these checks using regex but i am trying to avoid regex as much as possible
 
         // if no known pattern matches, return an unknown token.
-        pos++;
+        advance(); // move to the next character
         string temp;
         temp.push_back(current);
-        return {TOKEN_UNKNOWN, temp};  // convert char to string
+        return {TOKEN_UNKNOWN, temp, tokenLine, tokenColumn};  // convert char to string
     }
 
 private:
     string input;
     size_t pos;
+    int line;   // current line number
+    int column; // current column number
 
     // skips whitespace (spaces, tabs, newlines).
+    
+    void advance(){
+        if (pos < input.size()) {
+            if (input[pos] == '\n') {
+                line++;
+                column = 1;
+            } else {
+                column++;
+            }
+            pos++;
+        }
+    }
+
+
+
     void rWhiteSpace() {
         while (pos < input.size() && isSpace(input[pos])) {
-            pos++;
+           advance(); // skip whitespace
         }
     }
     bool isSpace(char ch) {
         // check for space, horizontal tab, newline,
-        return (ch == ' '  || ch == '\t' || ch == '\n' );
+        return (ch == ' '  || ch == '\t' || ch == '\n'|| ch == '\r');
     }
     
     bool isDigit(char c) {
@@ -209,32 +234,35 @@ private:
 
 
 // reads input from a file and prints tokens.
-// int main() {
-//     string filename = "sample.sql";
-//     ifstream file(filename);
-//     if (!file) {
-//         cerr << "Cannot open file: " << filename << endl;
-//         return 1;
-//     }
-//     string input;
-//     char ch;
-//     while (file.get(ch)) {
-//         input.push_back(ch);
-//     }
-//     file.close();
+int main() {
+    string filename = "sample.sql";
+    ifstream file(filename);
+    if (!file) {
+        cerr << "Cannot open file: " << filename << endl;
+        return 1;
+    }
+    string input;
+    char ch;
+    while (file.get(ch)) {
+        input.push_back(ch);
+    }
+    file.close();
 
-//     Lexer lexer(input);
-//     vector<Token> tokens;
-//     Token token;
-//     do {
-//         token = lexer.getNextToken();
-//         tokens.push_back(token);
-//     } while (token.type != TOKEN_EOF);
+    Lexer lexer(input);
+    vector<Token> tokens;
+    Token token;
+    do {
+        token = lexer.getNextToken();
+        tokens.push_back(token);
+    } while (token.type != TOKEN_EOF);
 
-//     // print the tokens.
-//     for (const auto &t : tokens) {
-//         cout << setw(15) << left << tokenToString(t.type) << " : " << t.lexeme << endl;
-//     }
+    // print the tokens.
+    for (const auto &t : tokens) {
+        cout << "Token: " << tokenToString(t.type) << " [ Lexeme: " << t.lexeme << " ]"<< endl;
+           cout << "[ Line: " << t.line << ", Column: " << t.column 
+             << " ]" << endl;
+        // cout<<t.column<<endl;
+    }
 
-//     return 0;
-// }
+    return 0;
+}

@@ -1,4 +1,4 @@
-// cfg for sql we are following:
+// cfg for sql (we are following):
 
 //bnf form:
 
@@ -356,25 +356,186 @@ set<string> computeFollow(const string &Non_Terminal) {
     return follow;
 }
 
-//testing
+//parser table for the grammar
+
+// compute first for a sequence of symbols (a production's rhs)
+set<string> firstforSeq(const vector<string> &symbols) {
+    set<string> result;
+    bool allNullable = true;
+    for (const auto &symbol : symbols) {
+        if (isNonTerminal(symbol)) {
+            set<string> firstOfSymbol = computeFirst(symbol);
+            // Insert all symbols except epsilon.
+            for (const auto &s : firstOfSymbol) {
+                if (s != "ε") {
+                    result.insert(s);
+                }
+            }
+            // If this symbol's first set doesn't contain ε, then stop.
+            if (firstOfSymbol.find("ε") == firstOfSymbol.end()) {
+                allNullable = false;
+                break;
+            }
+        } else {  // terminal symbol
+            result.insert(symbol);
+            allNullable = false;
+            break;
+        }
+    }
+    if (allNullable) {
+        result.insert("ε");
+    }
+    return result;
+}
+
+map<pair<string,string>, int> parseTable;
+
+void buildParsingTable() {
+    // for each production in our grammar:
+    for (auto &prod : productions) {
+        // compute first for the production's RHS.
+        set<string> firstSeq = firstforSeq(prod.rhs);
+        // for every terminal in first(α) (except ε), add the production to the table.
+        for ( const auto &terminal : firstSeq) {
+            if (terminal != "ε") {
+                pair<string, string> key(prod.lhs, terminal);
+                // Check for conflicts:
+                if (parseTable.find(key) != parseTable.end()) {
+                    cerr << "Conflict in parsing table for " << prod.lhs << ", " << terminal << endl;
+                }
+                parseTable[key] = &prod - &productions[0];  // Store the index of the production
+            }
+        }
+        // if first(α) contains ε, then for every terminal f in follow(prod.lhs),
+        // add the production to the table entry (A, f).
+        if (firstSeq.find("ε") != firstSeq.end()) {
+            set<string> followOfLHS = followSet[prod.lhs];  // assuming followSet is computed
+            for (const auto &terminal : followOfLHS) {
+                pair<string, string> key(prod.lhs, terminal);
+                if (parseTable.find(key) != parseTable.end()) {
+                    cerr << "Conflict in parsing table for " << prod.lhs << ", " << terminal << endl;
+                }
+                parseTable[key] = &prod - &productions[0];  // Store the index of the production
+            }
+        }
+    }
+}
+
+
+
+bool parseTokens(const vector<Token>& tokens) {
+    // Initialize the parsing stack with the end-of-input marker and the start symbol.
+    stack<string> parseStack;
+    parseStack.push("$");
+    parseStack.push("<SQL>");  // Start symbol
+    
+    // Index for the token stream.
+    int index = 0;
+    
+    while (!parseStack.empty()) {
+        string top = parseStack.top();
+        Token currentToken = tokens[index];
+        string tokenStr = tokenToString(currentToken.type);
+        
+        // If the top of the stack is the end marker and the current token is also end-of-input, accept.
+        if (top == "$" && tokenStr == "$") {
+            parseStack.pop();
+            break;
+        }
+        
+        // If the top is a terminal.
+        if (!isNonTerminal(top)) {
+            if (top == tokenStr) {
+                parseStack.pop();
+                index++;
+            } else {
+                cerr << "Syntax Error at line " << currentToken.line << ", column " << currentToken.column 
+                     << ": expected \"" << top << "\", found \"" << tokenStr << "\" (" << currentToken.lexeme << ")" << endl;
+                return false;
+            }
+        } else { // Top is a nonterminal.
+            pair<string, string> key(top, tokenStr);
+            if (parseTable.find(key) == parseTable.end()) {
+                cerr << "Syntax Error at line " << currentToken.line << ", column " << currentToken.column 
+                     << ": no rule for nonterminal " << top << " with lookahead \"" << tokenStr << "\" (" << currentToken.lexeme << ")" << endl;
+                return false;
+            }
+            int prodIndex = parseTable[key];
+            Production prod = productions[prodIndex];
+            parseStack.pop();
+            // Push production's RHS symbols in reverse order (if production is not ε).
+            if (!(prod.rhs.size() == 1 && prod.rhs[0] == "ε")) {
+                for (int i = prod.rhs.size() - 1; i >= 0; i--) {
+                    parseStack.push(prod.rhs[i]);
+                }
+            }
+        }
+    }
+    
+    // Check if we consumed all tokens.
+    if (tokens[index].type != TOKEN_EOF) {
+        cerr << "Syntax Error: Extra tokens remain after parsing." << endl;
+        return false;
+    }
+    
+    return true;
+}
 
 int main(){
     cout<<"First and Follow Sets for SQL Grammar"<<endl;
-    string input = "<WHERE_OPT>";
-    set<string> first = computeFirst(input);
-    cout << "First(" << input << ") = { ";
-    for (const auto &symbol : first) {
-        cout << symbol << " ";
+    cout<<"First Sets:"<<endl;
+    set<string> firstSet;
+    for(const auto &prod: productions){
+        if(firstSet.find(prod.lhs) == firstSet.end()){
+            set<string> first = computeFirst(prod.lhs);
+            cout<<prod.lhs<<": ";
+            for(const auto &symbol: first){
+                cout<<symbol<<" ";
+            }
+            cout<<endl;
+        }
+        firstSet.insert(prod.lhs);
     }
-    cout << "}" << endl;
 
-    string nonTerminal = "<STMT>";
-    set<string> follow = computeFollow(nonTerminal);
-    cout << "Follow(" << nonTerminal << ") = { ";
-    for (const auto &symbol : follow) {
-        cout << symbol << " ";
+    cout<<endl;
+
+    cout<<"Follow Sets:"<<endl;
+    set<string> followSet;
+
+    for(const auto &prod: productions){
+        if(followSet.find(prod.lhs) == followSet.end()){
+            set<string> follow = computeFollow(prod.lhs);
+            cout<<prod.lhs<<": ";
+            for(const auto &symbol: follow){
+                cout<<symbol<<" ";
+            }
+            cout<<endl;
+        }
+        followSet.insert(prod.lhs);
     }
-    cout << "}" << endl;
+    cout<<endl;
+
+    cout<<"First and Follow Sets Computed Successfully!"<<endl;
+
+    cout<<"Building Parsing Table..."<<endl;
+    buildParsingTable();
+
+    cout<<"Parsing Table Built Successfully!"<<endl;
+
+    cout<<"Parsing Table:"<<endl;
+    for (const auto &entry : parseTable) {
+        cout << "[" << entry.first.first << ", " << entry.first.second << "] Rule follow: " << productions[entry.second].lhs << " -> ";
+        for (const auto &symbol : productions[entry.second].rhs) {
+            cout << symbol << " ";
+        }
+        cout << endl;
+    }
+    cout<<endl;
+
+
+
+
 
     return 0;
 }
+
