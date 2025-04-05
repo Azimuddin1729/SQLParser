@@ -5,6 +5,7 @@ using namespace std;
 //this is the tokens list using enums for better readability
 enum TOKEN {
     // keywords
+
     TOKEN_SELECT,
     TOKEN_FROM,
     TOKEN_WHERE,
@@ -30,6 +31,7 @@ enum TOKEN {
     TOKEN_RPAREN,   // )
     TOKEN_COMMA,    // ,
     TOKEN_SEMICOLON,// ;
+    TOKEN_ASTERISK,
     // end-of-file and error
     TOKEN_EOF,
     TOKEN_UNKNOWN
@@ -61,6 +63,7 @@ string tokenToString(TOKEN type) {
         case TOKEN_RPAREN: return "RPAREN";
         case TOKEN_COMMA: return "COMMA";
         case TOKEN_SEMICOLON: return "SEMICOLON";
+        case TOKEN_ASTERISK: return "ASTERISK";
         case TOKEN_EOF: return "EOF";
         default: return "UNKNOWN";
     }
@@ -109,6 +112,7 @@ public:
         if (current == '=') { advance(); return {TOKEN_EQ, "=",tokenLine,tokenColumn}; }
         if (current == '>') { advance(); return {TOKEN_GT, ">",tokenLine,tokenColumn}; }
         if (current == '<') { advance(); return {TOKEN_LT, "<",tokenLine,tokenColumn}; }
+        if (current == '*') { advance(); return {TOKEN_ASTERISK, "*",tokenLine,tokenColumn}; }
 
         // check of string literals: assuming SQL strings use single quotes.
         if (current == '\'') {
@@ -229,6 +233,7 @@ private:
         {"OR",     TOKEN_OR},
         {"NOT",    TOKEN_NOT},
         {"DELETE", TOKEN_DELETE},
+        
     };
 };
 
@@ -261,6 +266,8 @@ private:
 //         cout << "Token: " << tokenToString(t.type) << " [ Lexeme: " << t.lexeme << " ]"<< endl;
 //            cout << "[ Line: " << t.line << ", Column: " << t.column 
 //              << " ]" << endl;
+
+//              cout<<endl;
 //         // cout<<t.column<<endl;
 //     }
 

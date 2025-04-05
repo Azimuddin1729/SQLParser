@@ -425,14 +425,11 @@ void buildParsingTable() {
 }
 
 
-
 bool parseTokens(const vector<Token>& tokens) {
-    // initialize the parsing stack with the end-of-input marker and the start symbol.
     stack<string> parseStack;
     parseStack.push("$");
-    parseStack.push("<SQL>");  // Start symbol
+    parseStack.push("<SQL>");
     
-    // index for the token stream.
     int index = 0;
     
     while (!parseStack.empty()) {
@@ -440,78 +437,94 @@ bool parseTokens(const vector<Token>& tokens) {
         Token currentToken = tokens[index];
         string tokenStr = tokenToString(currentToken.type);
         
-
-        if(tokenStr=="COMMA"){
-            tokenStr=",";
+        // Map token names to symbols for matching
+        if (tokenStr == "COMMA") {
+            tokenStr = ",";
+        } else if (tokenStr == "SEMICOLON") {
+            tokenStr = ";";
+        } else if (tokenStr == "LPAREN") {
+            tokenStr = "(";
+        } else if (tokenStr == "RPAREN") {
+            tokenStr = ")";
+        } else if (tokenStr == "EQ") {
+            tokenStr = "=";
+        } else if (tokenStr == "GT") {
+            tokenStr = ">";
+        } else if (tokenStr == "LT") {
+            tokenStr = "<";
+        } else if (tokenStr == "EOF") {
+            tokenStr = "$";
         }
-        else if( tokenStr=="SEMICOLON"){
-            tokenStr=";";
+        else if (tokenStr == "ASTERISK") {
+            tokenStr = "*";
         }
-        else if(tokenStr=="LPAREN"){
-            tokenStr="(";
-        }
-        else if(tokenStr=="RPAREN"){
-            tokenStr=")";
-        }
-        else if(tokenStr=="IDENTIFIER"){
-            tokenStr="IDENTIFIER";
-        }
-        else if(tokenStr=="NUMBER"){
-            tokenStr="NUMBER";
-        }
-        else if(tokenStr=="STRING"){
-            tokenStr="STRING";
-        }
-        else if(tokenStr=="EQ"){
-            tokenStr="=";
-        }
-        else if(tokenStr=="GT"){
-            tokenStr=">";
-        }
-        else if(tokenStr=="LT"){
-            tokenStr="<";
-        }
-    
-
-        else if(tokenStr=="EOF"){
-            tokenStr="$";
-        }
-        else if(tokenStr=="ASTERISK"){
-            tokenStr="*";
-        }
-
-
-        // if the top of the stack is the end marker and the current token is also end-of-input, accept.
+        
+        // When both the parse stack and the input are at the end.
         if (top == "$" && tokenStr == "$") {
             parseStack.pop();
             break;
         }
         
-        // if the top is a terminal.
+        // If top of stack is a terminal.
         if (!isNonTerminal(top)) {
             if (top == tokenStr) {
                 parseStack.pop();
                 index++;
             } else {
                 cerr << "Syntax Error at line " << currentToken.line << ", column " << currentToken.column 
-                     << ": expected \"" << top << "\", found \"" << tokenStr << "\" (" << currentToken.lexeme << ")" << endl;
+                     << ": expected \"" << top << "\", found \"" << tokenStr << "\" (" 
+                     << currentToken.lexeme << ")" << endl;
                 return false;
             }
         } else { // top is a nonterminal.
-           
-            
             pair<string, string> key(top, tokenStr);
-           
-
+            
             if (parseTable.find(key) == parseTable.end()) {
-                cerr << "Syntax Error at line " << currentToken.line << ", column " << currentToken.column 
-                     << ": no rule for nonterminal " << top << " with lookahead \"" << tokenStr << "\" (" << currentToken.lexeme << ")" << endl;
+                // Check for specific error cases:
+                if (top == "<ATTR_LIST_TAIL>" && tokenStr == "IDENTIFIER") {
+                    // Case: missing comma between attribute names.
+                    cerr << "Syntax Error at line " << currentToken.line << ", column " << currentToken.column 
+                         << ": missing comma between attribute names before \"" << currentToken.lexeme << "\"" << endl;
+                }
+                else if (top == "<INSERT_TAIL>" && tokenStr == "(") {
+                    // A possible case: missing VALUES keyword.
+                    cerr << "Syntax Error at line " << currentToken.line << ", column " << currentToken.column 
+                         << ": missing 'VALUES' keyword before '(' in INSERT statement." << endl;
+                }
+                else if (top == "<SQL_TAIL>" && tokenStr == "$") {
+                    // When reaching the end, it might be that a semicolon is missing.
+                    cout << "As we have reached the end and got '$', there might be a missing semicolon (';')." << endl;
+                }
+                else if (top == "<TABLE>" && tokenStr == "WHERE") {
+                    // Case: missing table name before WHERE clause.
+                    cerr << "Syntax Error at line " << currentToken.line << ", column " << currentToken.column 
+                         << ": missing table name before WHERE clause." << endl;
+
+                }
+                else if( top == "<STMT>" && tokenStr == "SELECT"){
+                    //case : missing select or insert or delete before the statement
+                    cerr << "Syntax Error at line " << currentToken.line << ", column " << currentToken.column 
+                         << ": missing SELECT, INSERT, or DELETE before the statement." << endl;
+                }
+                else if (tokenStr == "$") {
+                    // Generic handling when end-of-input is reached unexpectedly.
+                    cout << "Syntax Error: reached end of input unexpectedly. Possibly a missing semicolon (';')." << endl;
+                }
+
+               
+                else {
+                    // generic error message for unhandled cases.
+                    cerr << "Syntax Error at line " << currentToken.line << ", column " << currentToken.column 
+                         << ": no rule for nonterminal " << top << " with lookahead \"" << tokenStr 
+                         << "\" (" << currentToken.lexeme << ")" << endl;
+                }
                 return false;
             }
+            
             int prodIndex = parseTable[key];
             Production prod = productions[prodIndex];
             parseStack.pop();
-            // push production's RHS symbols in reverse order (if production is not ε).
+            // Push the production's RHS in reverse order (unless it is epsilon).
             if (!(prod.rhs.size() == 1 && prod.rhs[0] == "ε")) {
                 for (int i = prod.rhs.size() - 1; i >= 0; i--) {
                     parseStack.push(prod.rhs[i]);
@@ -520,7 +533,7 @@ bool parseTokens(const vector<Token>& tokens) {
         }
     }
     
-    // check if we consumed all tokens.
+    // After parsing, ensure no extra tokens remain.
     if (tokens[index].type != TOKEN_EOF) {
         cerr << "Syntax Error: Extra tokens remain after parsing." << endl;
         return false;
@@ -554,51 +567,41 @@ int main(){
         tokens.push_back(token);
     } while (token.type != TOKEN_EOF);
 
-    // print the tokens.
-    // for (const auto &t : tokens) {
-    //     cout << "Token: " << tokenToString(t.type) << " [ Lexeme: " << t.lexeme << " ]"<< endl;
-    //        cout << "[ Line: " << t.line << ", Column: " << t.column 
-    //          << " ]" << endl;
-
-    //          cout<<endl;
-    //     // cout<<t.column<<endl;
-    // }
-
-    //first calculating the first and follow sets for the grammar
-
-    cout<<"First and Follow Sets for SQL Grammar"<<endl;
-    cout<<"First Sets:"<<endl;
+    // cout<<"First and Follow Sets for SQL Grammar"<<endl;
+    // cout<<"First Sets:"<<endl;
     set<string> firstSet;
     
     for(const auto &prod: productions){
         if(firstSet.find(prod.lhs) == firstSet.end()){
             set<string> first = computeFirst(prod.lhs);
-            cout<<prod.lhs<<": ";
-            for(const auto &symbol: first){
-                cout<<symbol<<" ";
-            }
-            cout<<endl;
+            // cout<<prod.lhs<<": ";
+            // for(const auto &symbol: first){
+            //     cout<<symbol<<" ";
+            // }
+            // cout<<endl;
         }
         firstSet.insert(prod.lhs);
     }
-    cout<<endl;
-
-    cout<<"Follow Sets:"<<endl;
+    // cout<<endl;
+ 
+    // cout<<"Follow Sets:"<<endl;
     set<string> followSet;
     for(const auto &prod: productions){
         if(followSet.find(prod.lhs) == followSet.end()){
             set<string> follow = computeFollow(prod.lhs);
-            cout<<prod.lhs<<": ";
-            for(const auto &symbol: follow){
-                cout<<symbol<<" ";
-            }
-            cout<<endl;
+            // cout<<prod.lhs<<": ";
+            // for(const auto &symbol: follow){
+            //     cout<<symbol<<" ";
+            // }
+            // cout<<endl;
         }
         followSet.insert(prod.lhs);
     }
-    cout<<endl;
+    // cout<<endl;
 
-    cout<<"First and Follow Sets Computed Successfully!"<<endl;
+    
+
+    // cout<<"First and Follow Sets Computed Successfully!"<<endl;
 
 
     //making the parsing table for the grammar
@@ -608,28 +611,29 @@ int main(){
     cout<<"Parsing Table Built Successfully!"<<endl;
 
 
-    cout<<"Parsing Table:"<<endl;
-    for (const auto &entry : parseTable) {
-        cout << "[" << entry.first.first << ", " << entry.first.second << "] Rule follow: " << productions[entry.second].lhs << " -> ";
-        for (const auto &symbol : productions[entry.second].rhs) {
-            cout << symbol << " ";
-        }
-        cout << endl;
-    }
-    cout<<endl;
-
-    // cout<<"Parsing the SQL query..."<<endl;
-
-    // if (parseTokens(tokens)) {
-    //     cout << "Parsing completed successfully!" << endl;
-    // } else {
-    //     cout << "Parsing failed!" << endl;
+    // cout<<"Parsing Table:"<<endl;
+    // for (const auto &entry : parseTable) {
+    //     cout << "[" << entry.first.first << ", " << entry.first.second << "] Rule follow: " << productions[entry.second].lhs << " -> ";
+    //     for (const auto &symbol : productions[entry.second].rhs) {
+    //         cout << symbol << " ";
+    //     }
+    //     cout << endl;
     // }
     // cout<<endl;
 
-    // cout<<"Exiting..."<<endl;
-    // cout<<"Thank you!"<<endl;
-    // cout<<"Have a nice day!"<<endl;
+
+       cout<<"Parsing the SQL query..."<<endl;
+
+    if (parseTokens(tokens)) {
+        cout << "Parsing completed successfully!" << endl;
+    } else {
+        cout << "Parsing failed!" << endl;
+    }
+    cout<<endl;
+
+    cout<<"Exiting..."<<endl;
+    cout<<"Thank you!"<<endl;
+    cout<<"Have a nice day!"<<endl;
 
     return 0;
 }
